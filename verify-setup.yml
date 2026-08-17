@@ -1,0 +1,47 @@
+name: Verify Instagram Setup
+
+# Read-only preflight. Checks your secrets and your video WITHOUT posting.
+# Run this before the first real publish.
+on:
+  workflow_dispatch:
+    inputs:
+      video_path:
+        description: "Video to validate"
+        default: "posts/reel.mp4"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check secrets are non-empty
+        run: |
+          MISSING=0
+          [ -z "${{ secrets.IG_USER_ID }}" ] && { echo "::error::IG_USER_ID secret is missing"; MISSING=1; }
+          [ -z "${{ secrets.IG_ACCESS_TOKEN }}" ] && { echo "::error::IG_ACCESS_TOKEN secret is missing"; MISSING=1; }
+          [ "$MISSING" = "1" ] && exit 1
+          echo "Both secrets exist."
+
+      - name: Verify token + account
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: python3 scripts/verify_setup.py
+
+      - name: Validate video file
+        run: python3 scripts/check_reel.py "${{ github.event.inputs.video_path || 'posts/reel.mp4' }}"
+
+      - name: Confirm the public URL Meta will fetch
+        run: |
+          SHA=$(git rev-parse HEAD)
+          URL="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${SHA}/${{ github.event.inputs.video_path || 'posts/reel.mp4' }}"
+          echo "Testing $URL"
+          CT=$(curl -sSIL --max-time 30 "$URL" | grep -i "^content-type" | tail -1)
+          echo "$CT"
+          echo "$CT" | grep -qi "video/mp4" \
+            && echo "::notice::URL serves video/mp4 -- Meta can fetch it" \
+            || echo "::warning::Not served as video/mp4 yet (jsDelivr may need a few minutes on a fresh commit)"
