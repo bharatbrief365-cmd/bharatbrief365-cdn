@@ -1,1 +1,54 @@
+name: Post Reel to Instagram
 
+on:
+  # Daily at 12:30 UTC = 18:00 IST. Cron is always UTC.
+  schedule:
+    - cron: "30 12 * * *"
+  # Manual run button in the Actions tab
+  workflow_dispatch:
+    inputs:
+      video_path:
+        description: "Path in the CDN repo, e.g. posts/reel.mp4"
+        default: "posts/reel.mp4"
+      caption:
+        description: "Caption text"
+        default: ""
+
+concurrency:
+  group: instagram-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve public video URL
+        id: url
+        env:
+          # <-- CHANGE THESE TWO to your repo
+          CDN_OWNER: bharatbrief365-cmd
+          CDN_REPO: bharatbrief365-cdn
+          VIDEO_PATH: ${{ github.event.inputs.video_path || 'posts/reel.mp4' }}
+        run: |
+          # jsDelivr serves the raw GitHub file with a correct video/mp4
+          # Content-Type and proper range support, which Meta's fetcher needs.
+          # Cache-bust with the commit SHA so Meta never gets a stale copy.
+          SHA=$(git rev-parse HEAD)
+          URL="https://cdn.jsdelivr.net/gh/${CDN_OWNER}/${CDN_REPO}@${SHA}/${VIDEO_PATH}"
+          echo "video_url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Using $URL"
+
+      - name: Publish
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          VIDEO_URL: ${{ steps.url.outputs.video_url }}
+          CAPTION: ${{ github.event.inputs.caption }}
+          SHARE_TO_FEED: "true"
+        run: python scripts/post_reel.py

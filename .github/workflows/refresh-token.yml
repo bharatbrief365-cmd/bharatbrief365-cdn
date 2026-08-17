@@ -1,1 +1,32 @@
+name: Refresh Instagram Token
 
+# Long-lived tokens expire after 60 days. This refreshes monthly and
+# writes the new token back into the repo secret, so your automation
+# never silently dies.
+on:
+  schedule:
+    - cron: "0 3 1 * *"   # 1st of each month
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Exchange for a fresh 60-day token
+        env:
+          TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          APP_ID: ${{ secrets.META_APP_ID }}
+          APP_SECRET: ${{ secrets.META_APP_SECRET }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}   # PAT with 'secrets: write' on this repo
+        run: |
+          NEW=$(curl -sG "https://graph.facebook.com/v21.0/oauth/access_token" \
+            --data-urlencode "grant_type=fb_exchange_token" \
+            --data-urlencode "client_id=$APP_ID" \
+            --data-urlencode "client_secret=$APP_SECRET" \
+            --data-urlencode "fb_exchange_token=$TOKEN" \
+            | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+          echo "::add-mask::$NEW"
+          gh secret set IG_ACCESS_TOKEN --body "$NEW" --repo "$GITHUB_REPOSITORY"
+          echo "Token refreshed."
