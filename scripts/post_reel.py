@@ -56,16 +56,43 @@ def call(method, path, params):
 
 
 def preflight():
-    """Fail fast if the URL isn't publicly reachable — Meta must fetch it."""
-    req = urllib.request.Request(VIDEO_URL, method="HEAD",
-                                 headers={"User-Agent": "ig-autopost/1.0"})
+    """Fail fast if the URL isn't publicly reachable -- Meta must fetch it.
+
+    Uses a ranged GET rather than HEAD: some CDNs answer HEAD differently
+    from GET, and Meta's fetcher issues ranged GETs.
+    """
+    req = urllib.request.Request(
+        VIDEO_URL, headers={"User-Agent": "Mozilla/5.0 (compatible; IGBot/1.0)",
+                            "Range": "bytes=0-1023"})
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            size = int(r.headers.get("Content-Length") or 0)
+        with urllib.request.urlopen(req, timeout=45) as r:
             ctype = r.headers.get("Content-Type", "?")
-            print(f"Video reachable: {r.status} | {ctype} | {size/1e6:.1f} MB")
+            crange = r.headers.get("Content-Range", "")
+            size = int(crange.split("/")[-1]) if "/" in crange else \
+                int(r.headers.get("Content-Length") or 0)
+            print(f"Video reachable: HTTP {r.status} | {ctype} | "
+                  f"{size/1e6:.1f} MB")
+            if not ctype.lower().startswith("video/"):
+                print(f"::warning::Content-Type is {ctype}, not video/*. "
+                      "Meta often rejects this.")
             if size > 100 * 1024 * 1024:
-                print("::warning::Video >100MB — Meta may reject it.")
+                print("::warning::Video >100MB -- Meta may reject it.")
+    except urllib.error.HTTPError as e:
+        print(f"::error::Video URL returned HTTP {e.code}: {VIDEO_URL}",
+              file=sys.stderr)
+        if e.code == 404:
+            print("\nThe file is not being served at that URL. Common causes:",
+                  file=sys.stderr)
+            print("  - jsDelivr cannot serve this repo/commit "
+                  "('Failed to fetch the requested commit'). Use the "
+                  "GitHub Pages URL instead -- scripts/resolve_url.py "
+                  "picks a working host automatically.", file=sys.stderr)
+            print("  - GitHub Pages is not enabled "
+                  "(Settings > Pages > Deploy from a branch > main > /root).",
+                  file=sys.stderr)
+            print("  - The path is wrong or the commit was just pushed.",
+                  file=sys.stderr)
+        raise SystemExit(1)
     except Exception as e:
         raise SystemExit(f"Video URL not publicly reachable: {e}")
 

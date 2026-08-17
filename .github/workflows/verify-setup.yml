@@ -43,11 +43,8 @@ jobs:
       - name: Confirm the public URL Meta will fetch
         if: always()
         run: |
-          SHA=$(git rev-parse HEAD)
-          URL="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${SHA}/${{ github.event.inputs.video_path || 'posts/reel.mp4' }}"
-          echo "Testing $URL"
-          CT=$(curl -sSIL --max-time 30 "$URL" | grep -i "^content-type" | tail -1)
-          echo "$CT"
-          echo "$CT" | grep -qi "video/mp4" \
-            && echo "::notice::URL serves video/mp4 -- Meta can fetch it" \
-            || echo "::warning::Not served as video/mp4 yet (jsDelivr may need a few minutes on a fresh commit)"
+          OWNER="${GITHUB_REPOSITORY%%/*}"
+          REPO="${GITHUB_REPOSITORY##*/}"
+          python3 -u scripts/resolve_url.py \
+            "${{ github.event.inputs.video_path || 'posts/reel.mp4' }}" \
+            "$OWNER" "$REPO" "$(git rev-parse HEAD)"
