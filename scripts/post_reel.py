@@ -12,13 +12,16 @@ Env vars required:
   IG_ACCESS_TOKEN  Long-lived token w/ instagram_business_content_publish
   VIDEO_URL        Public HTTPS mp4 URL
 Optional:
-  COVER_URL, CAPTION, SHARE_TO_FEED (true/false), GRAPH_VERSION
+  CAPTION_FILE     Path to a caption file, e.g. posts/caption.txt
+  CAPTION          Inline caption -- overrides CAPTION_FILE when non-empty
+  COVER_URL, SHARE_TO_FEED (true/false), GRAPH_VERSION
 """
 
 import os
 import sys
 import time
 import json
+import re
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -29,8 +32,54 @@ IG_USER_ID = os.environ["IG_USER_ID"]
 TOKEN = os.environ["IG_ACCESS_TOKEN"]
 VIDEO_URL = os.environ["VIDEO_URL"]
 COVER_URL = os.getenv("COVER_URL", "").strip()
-CAPTION = os.getenv("CAPTION", "").strip()
 SHARE_TO_FEED = os.getenv("SHARE_TO_FEED", "true").strip().lower()
+
+CAPTION_MAX = 2200          # Instagram hard limit
+HASHTAG_MAX = 30            # Instagram hard limit
+
+
+def load_caption():
+    """CAPTION env wins; otherwise read CAPTION_FILE (e.g. posts/caption.txt).
+
+    Read as UTF-8 so emoji and smart quotes survive -- the file is full of
+    both, and a mangled encoding is a silent way to get garbled captions.
+    """
+    manual = os.getenv("CAPTION", "").strip()
+    if manual:
+        print("Caption: using CAPTION input (overrides the file)")
+        return manual
+
+    path = os.getenv("CAPTION_FILE", "").strip()
+    if not path:
+        print("Caption: none supplied -- posting without one")
+        return ""
+    if not os.path.exists(path):
+        print(f"::warning::CAPTION_FILE '{path}' not found -- "
+              "posting without a caption")
+        return ""
+
+    with open(path, encoding="utf-8") as f:
+        text = f.read().strip()
+    if not text:
+        print(f"::warning::{path} is empty -- posting without a caption")
+        return ""
+
+    tags = len(re.findall(r"#\w+", text))
+    print(f"Caption: loaded {len(text)} chars, {tags} hashtags from {path}")
+
+    if len(text) > CAPTION_MAX:
+        # Trim on a word boundary so we never cut mid-word or mid-emoji.
+        cut = text[:CAPTION_MAX].rsplit(" ", 1)[0]
+        print(f"::warning::Caption was {len(text)} chars (limit "
+              f"{CAPTION_MAX}) -- trimmed to {len(cut)}")
+        text = cut
+    if tags > HASHTAG_MAX:
+        print(f"::warning::{tags} hashtags exceeds Instagram's "
+              f"{HASHTAG_MAX} limit -- the post may be rejected")
+    return text
+
+
+CAPTION = load_caption()
 
 POLL_INTERVAL = 10          # seconds between status checks
 POLL_TIMEOUT = 15 * 60      # give Meta 15 min to ingest the video
