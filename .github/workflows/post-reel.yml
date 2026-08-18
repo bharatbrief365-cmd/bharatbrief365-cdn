@@ -11,8 +11,11 @@ on:
         description: "Path in the CDN repo, e.g. posts/reel.mp4"
         default: "posts/reel.mp4"
       caption:
-        description: "Caption text"
+        description: "Caption override (leave blank to use posts/caption.txt)"
         default: ""
+      caption_file:
+        description: "Caption file in the repo"
+        default: "posts/caption.txt"
 
 concurrency:
   group: instagram-publish
@@ -45,6 +48,9 @@ jobs:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           VIDEO_URL: ${{ steps.url.outputs.video_url }}
+          # Blank on scheduled runs, so the file is used automatically.
           CAPTION: ${{ github.event.inputs.caption }}
+          CAPTION_FILE: ${{ github.event.inputs.caption_file || 'posts/caption.txt' }}
           SHARE_TO_FEED: "true"
-        run: python scripts/post_reel.py
+          PYTHONUNBUFFERED: "1"
+        run: python -u scripts/post_reel.py
