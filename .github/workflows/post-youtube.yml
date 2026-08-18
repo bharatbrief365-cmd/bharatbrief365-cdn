@@ -1,0 +1,55 @@
+name: Post Short to YouTube
+
+on:
+  schedule:
+    # 12:45 UTC = 18:15 IST -- 15 min after Instagram so the two don't clash
+    - cron: "45 12 * * *"
+  workflow_dispatch:
+    inputs:
+      video_path:
+        description: "Video in the repo"
+        default: "posts/reel.mp4"
+      caption_file:
+        description: "Caption file (title + description come from this)"
+        default: "posts/caption.txt"
+      title:
+        description: "Title override (blank = first line of caption)"
+        default: ""
+      privacy:
+        description: "public / unlisted / private"
+        default: "public"
+
+concurrency:
+  group: youtube-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve public video URL
+        id: url
+        run: |
+          OWNER="${GITHUB_REPOSITORY%%/*}"
+          REPO="${GITHUB_REPOSITORY##*/}"
+          python3 -u scripts/resolve_url.py \
+            "${{ github.event.inputs.video_path || 'posts/reel.mp4' }}" \
+            "$OWNER" "$REPO" "$(git rev-parse HEAD)"
+
+      - name: Upload
+        env:
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          VIDEO_URL: ${{ steps.url.outputs.video_url }}
+          CAPTION_FILE: ${{ github.event.inputs.caption_file || 'posts/caption.txt' }}
+          YT_TITLE: ${{ github.event.inputs.title }}
+          YT_PRIVACY: ${{ github.event.inputs.privacy || 'public' }}
+          YT_CATEGORY_ID: "25"
+          PYTHONUNBUFFERED: "1"
+        run: python -u scripts/post_youtube.py
