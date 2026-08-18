@@ -3,7 +3,7 @@ name: Post Reel to Instagram
 on:
   # Daily at 12:30 UTC = 18:00 IST. Cron is always UTC.
   schedule:
-    - cron: "30 12 * * *"
+    - cron: "30 6 * * *"
   # Manual run button in the Actions tab
   workflow_dispatch:
     inputs:
