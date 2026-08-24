@@ -1,9 +1,9 @@
 name: Post Short to YouTube
 
 on:
-  schedule:
+#  schedule:
     # 12:45 UTC = 18:15 IST -- 15 min after Instagram so the two don't clash
-    - cron: "45 12 * * *"
+#    - cron: "45 12 * * *"
   workflow_dispatch:
     inputs:
       video_path:
